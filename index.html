@@ -1,45 +1,251 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<!-- Playables SDK -->
+<script>// Playables SDK v1.0.0
+// Game lifecycle bridge: rAF-based game-ready detection + event communication
+(function() {
+  'use strict';
+
+  // Idempotency: skip if already initialized (e.g., server-side injection
+  // followed by client-side inject-javascript via the Bloks webview component).
+  if (window.playablesSDK) return;
+
+  var HANDLER_NAME = 'playablesGameEventHandler';
+  var ANDROID_BRIDGE_NAME = '_MetaPlayablesBridge';
+  var RAF_FRAME_THRESHOLD = 3;
+
+  var gameReadySent = false;
+  var firstInteractionSent = false;
+  var errorSent = false;
+  var frameCount = 0;
+  var originalRAF = window.requestAnimationFrame;
+
+  // --- Transport Layer ---
+
+  function hasIOSBridge() {
+    return !!(window.webkit &&
+              window.webkit.messageHandlers &&
+              window.webkit.messageHandlers[HANDLER_NAME]);
+  }
+
+  function hasAndroidBridge() {
+    return !!(window[ANDROID_BRIDGE_NAME] &&
+              typeof window[ANDROID_BRIDGE_NAME].postEvent === 'function');
+  }
+
+  function isInIframe() {
+    return !!(window.parent && window.parent !== window);
+  }
+
+  function sendEvent(eventName, payload) {
+    var message = {
+      type: eventName,
+      payload: payload || {},
+      timestamp: Date.now()
+    };
+
+    if (hasIOSBridge()) {
+      try {
+        window.webkit.messageHandlers[HANDLER_NAME].postMessage(message);
+      } catch (e) { /* ignore */ }
+      return;
+    }
+
+    if (hasAndroidBridge()) {
+    try {
+      var p = payload || {};
+      p.__secureToken = window.__fbAndroidBridgeAuthToken || '';
+      window[ANDROID_BRIDGE_NAME].postEvent(
+        eventName,
+        JSON.stringify(p)
+      );
+    } catch (e) { /* ignore */ }
+    return;
+  }
+
+    if (isInIframe()) {
+      try {
+        window.parent.postMessage(message, '*');
+      } catch (e) { /* ignore */ }
+      return;
+    }
+  }
+
+  // --- rAF Game-Ready Detection ---
+
+  function onFrame() {
+    if (gameReadySent) return;
+
+    frameCount++;
+    if (frameCount >= RAF_FRAME_THRESHOLD) {
+      gameReadySent = true;
+      sendEvent('game_ready', {
+        frame_count: frameCount,
+        detected_at: Date.now()
+      });
+      return;
+    }
+
+    originalRAF.call(window, onFrame);
+  }
+
+  if (originalRAF) {
+    window.requestAnimationFrame = function(callback) {
+      if (!gameReadySent) {
+        return originalRAF.call(window, function(timestamp) {
+          frameCount++;
+          if (frameCount >= RAF_FRAME_THRESHOLD && !gameReadySent) {
+            gameReadySent = true;
+            sendEvent('game_ready', {
+              frame_count: frameCount,
+              detected_at: Date.now()
+            });
+          }
+          callback(timestamp);
+        });
+      }
+      return originalRAF.call(window, callback);
+    };
+  }
+
+  // --- First User Interaction Detection ---
+
+  function setupFirstInteractionDetection() {
+    var events = ['touchstart', 'mousedown', 'keydown'];
+
+    function onFirstInteraction() {
+      if (firstInteractionSent) return;
+      firstInteractionSent = true;
+      sendEvent('user_interaction_start', null);
+
+      for (var i = 0; i < events.length; i++) {
+        document.removeEventListener(events[i], onFirstInteraction, true);
+      }
+    }
+
+    for (var i = 0; i < events.length; i++) {
+      document.addEventListener(events[i], onFirstInteraction, true);
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupFirstInteractionDetection);
+  } else {
+    setupFirstInteractionDetection();
+  }
+
+  // --- Auto Error Capture ---
+
+  window.addEventListener('error', function(event) {
+    if (errorSent) return;
+    errorSent = true;
+    sendEvent('error', {
+      message: event.message || 'Unknown error',
+      source: event.filename || '',
+      lineno: event.lineno || 0,
+      colno: event.colno || 0,
+      auto_captured: true
+    });
+  });
+
+  window.addEventListener('unhandledrejection', function(event) {
+    if (errorSent) return;
+    errorSent = true;
+    var reason = event.reason;
+    sendEvent('error', {
+      message: (reason instanceof Error) ? reason.message : String(reason),
+      type: 'unhandled_promise_rejection',
+      auto_captured: true
+    });
+  });
+
+  // --- Public API ---
+
+  window.playablesSDK = {
+    complete: function(score) {
+      sendEvent('game_ended', {
+        score: score,
+        completed: true
+      });
+    },
+
+    error: function(message) {
+      if (errorSent) return;
+      errorSent = true;
+      sendEvent('error', {
+        message: message || 'Unknown error',
+        auto_captured: false
+      });
+    },
+
+    sendEvent: function(eventName, payload) {
+      if (!eventName || typeof eventName !== 'string') return;
+      sendEvent(eventName, payload);
+    }
+  };
+
+  // Kick off rAF detection in case no game code calls rAF immediately
+  if (originalRAF) {
+    originalRAF.call(window, onFrame);
+  }
+})();</script>
+<script>window.Intl=window.Intl||{};Intl.t=function(s){return(Intl._locale&&Intl._locale[s])||s;};</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NGO VISA NAVIGATOR — 2026 Final</title>
+<title>NGO Visa Navigator 2026-2033</title>
+<meta name="description" content="Personalized visa pathway with full calendar 2026-2033">
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 :root{
-  --bg:#050507;
-  --bg-2:#0a0a0f;
-  --panel:#0f0f14;
-  --glass:rgba(255,255,255,0.03);
+  --bg:#030305;
+  --bg-2:#070709;
+  --panel:rgba(18,18,23,0.7);
+  --card:rgba(18,18,23,0.65);
+  --glass:rgba(255,255,255,0.04);
   --border:rgba(255,255,255,0.08);
   --text:#e4e4e7;
   --text-dim:#a1a1aa;
   --muted:#71717a;
   
-  --blue:#8b8b94;
-  --green:#9ca3af;
-  --amber:#a8a29e;
-  --red:#a1a1aa;
+  --blue:#3b82f6;
+  --green:#22c55e;
+  --amber:#f59e0b;
+  --red:#ef4444;
   --radius:20px;
   --shadow:0 20px 60px rgba(0,0,0,0.5);
 }
 *{box-sizing:border-box}html,body{height:100%}body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased}
-body::before{content:'';position:fixed;inset:0;z-index:-1;background:radial-gradient(800px 600px at 15% 10%, rgba(255,255,255,0.25), transparent 60%),radial-gradient(700px 500px at 85% 15%, rgba(59,130,246,0.22), transparent 60%),radial-gradient(600px 400px at 20% 85%, rgba(236,72,153,0.18), transparent 60%),radial-gradient(500px 400px at 80% 80%, rgba(16,185,129,0.18), transparent 60%)}
+body::before{content:'';position:fixed;inset:0;z-index:-2;background:#020204}
+body::after{content:'';position:fixed;inset:0;z-index:-1;background:
+  radial-gradient(1200px 900px at 50% -5%, rgba(180,180,200,0.08), transparent 60%),
+  radial-gradient(900px 700px at 90% 10%, rgba(37,99,235,0.18), transparent 65%),
+  radial-gradient(800px 600px at 10% 25%, rgba(255,255,255,0.04), transparent 55%),
+  radial-gradient(1000px 800px at 15% 90%, rgba(168,85,247,0.16), transparent 60%),
+  radial-gradient(900px 700px at 85% 90%, rgba(16,185,129,0.14), transparent 62%),
+  radial-gradient(700px 500px at 50% 50%, rgba(30,30,40,0.5), transparent 70%);
+  filter: blur(0px) saturate(1.1);
+}
 .app{display:grid;grid-template-columns:80px 1fr 340px;min-height:100vh}
-.left{position:sticky;top:0;height:100vh;display:flex;flex-direction:column;align-items:center;gap:14px;padding:18px 0;background:rgba(0,0,0,0.25);border-right:1px solid var(--border);backdrop-filter:blur(12px)}
+.left{position:sticky;top:0;height:100vh;display:flex;flex-direction:column;align-items:center;gap:14px;padding:18px 0;background:rgba(3,3,5,0.7);border-right:1px solid var(--border);backdrop-filter:blur(20px)}
 .logo{width:44px;height:44px;border-radius:14px;background:linear-gradient(135deg,#2a2a30,#1f1f25);display:grid;place-items:center;font-weight:700;font-size:20px}
 .nav-btn{width:52px;height:52px;border-radius:16px;display:grid;place-items:center;color:var(--muted);background:transparent;border:1px solid transparent;cursor:pointer;transition:.2s}
 .nav-btn:hover{background:rgba(255,255,255,0.06);color:var(--text)} .nav-btn.active{background:rgba(255,255,255,0.2);color:white;border-color:rgba(255,255,255,0.4);box-shadow:0 0 20px rgba(255,255,255,0.25) inset}
 .center{max-width:900px;width:100%;margin:0 auto;padding:24px}
-.topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:22px}
-.title{display:flex;align-items:center;gap:10px;font-weight:700;font-size:20px}
-.chips{display:flex;gap:8px;flex-wrap:wrap}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:22px;flex-wrap:nowrap}
+.title{display:flex;align-items:center;gap:10px;font-weight:700;font-size:19px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
+.chips{display:flex;gap:8px;flex-wrap:nowrap;flex-shrink:0}
 .chip{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:rgba(255,255,255,0.06);border:1px solid var(--border);font-size:12px;color:var(--muted);cursor:pointer;user-select:none}
-.chip.live{color:#a7f3d0;border-color:rgba(16,185,129,0.3)} .dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green);animation:pulse 2s infinite}
+.chip.live{color:#a7f3d0;border-color:rgba(16,185,129,0.3)}
+.chip.live{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;background:rgba(0,0,0,0.6);border:1px solid rgba(34,197,94,0.3);border-radius:999px;font-variant-numeric:tabular-nums;backdrop-filter:blur(10px)}
+.chip.live .dot{width:8px;height:8px;border-radius:50%;background:#22c55e;box-shadow:0 0 8px rgba(34,197,94,0.8);animation:pulse 2s infinite;flex-shrink:0}
+#live-time{font-family:'SF Mono',ui-monospace,monospace;font-size:12px;font-weight:500;color:#e4e4e7;letter-spacing:0.3px}
+ .dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green);animation:pulse 2s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 .right{padding:24px 20px 24px 0} @media(max-width:1200px){.app{grid-template-columns:80px 1fr}.right{display:none}}
 @media(max-width:768px){.app{grid-template-columns:1fr}.left{display:none}.center{padding:16px 16px 90px}.topbar{flex-direction:column;align-items:flex-start;gap:10px}}
-.card{background:var(--card);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid var(--border);border-radius:20px;padding:20px}
+.card{background:var(--card);backdrop-filter:blur(24px) saturate(1.2);-webkit-backdrop-filter:blur(24px) saturate(1.2);border:1px solid var(--border);border-radius:24px;padding:22px;box-shadow:0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05);position:relative;overflow:hidden}
+.card::before{content:'';position:absolute;inset:0;background:linear-gradient(180deg, rgba(255,255,255,0.06), transparent 30%);pointer-events:none;opacity:0.6}
 .card+.card{margin-top:16px}
 h2{margin:0 0 12px;font-size:18px} h3{margin:0 0 8px;font-size:15px} p{margin:0;color:var(--muted);line-height:1.5}
 .grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px} .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px} .grid-2{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
@@ -52,7 +258,7 @@ h2{margin:0 0 12px;font-size:18px} h3{margin:0 0 8px;font-size:15px} p{margin:0;
 .checklist{display:grid;gap:10px;margin-top:12px} .check{display:flex;gap:10px;align-items:flex-start;padding:10px;border-radius:12px;background:rgba(255,255,255,0.03);border:1px solid transparent}
 .quick-ngos{display:grid;gap:12px} .ngo-card{display:block;padding:14px;border-radius:14px;background:rgba(255,255,255,0.03);border:1px solid var(--border);text-decoration:none;color:var(--text);transition:.2s} .ngo-card:hover{background:rgba(255,255,255,0.06);transform:translateY(-2px)} .ngo-card .name{font-weight:600} .ngo-meta{display:flex;gap:10px;margin-top:6px;font-size:12px;color:var(--muted);flex-wrap:wrap}
 .badge{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:999px;font-size:11px;background:rgba(255,255,255,0.08);border:1px solid var(--border);color:#cbd5e1;white-space:nowrap}
-.badge.green{background:rgba(255,255,255,0.1);color:#e4e4e7;border:1px solid rgba(255,255,255,0.15)} .badge.amber{background:rgba(255,255,255,0.08);color:#d4d4d8;border:1px solid rgba(255,255,255,0.12)} .badge.red{background:rgba(255,255,255,0.06);color:#a1a1aa;border:1px solid rgba(255,255,255,0.1)}
+.badge.green{background:rgba(34,197,94,0.15);color:#86efac;border:1px solid rgba(34,197,94,0.3)} .badge.amber{background:rgba(245,158,11,0.15);color:#fcd34d;border:1px solid rgba(245,158,11,0.3)} .badge.red{background:rgba(239,68,68,0.15);color:#fca5a5;border:1px solid rgba(239,68,68,0.3)}
 .view{display:none;animation:fade .3s ease} .view.active{display:block} @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 .step-card{padding:18px} .step-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap} .step-title{font-weight:700;font-size:17px} .step-stats{display:flex;gap:8px;flex-wrap:wrap}
 .step-grid{display:grid;grid-template-columns:1.2fr .8fr;gap:16px} @media(max-width:700px){.step-grid{grid-template-columns:1fr}}
@@ -575,6 +781,59 @@ main::-webkit-scrollbar-thumb:hover {
   }
 }
 
+
+/* FULL CALENDAR 2026-2033 */
+.calendar-full{margin-top:14px}
+.cal-controls{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding:12px;background:rgba(255,255,255,0.03);border-radius:12px;flex-wrap:wrap;gap:10px}
+.cal-nav{display:flex;gap:8px;align-items:center}
+.cal-btn{padding:6px 12px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-size:13px}
+.cal-btn:hover{background:rgba(255,255,255,0.1)}
+.cal-btn:disabled{opacity:.4}
+.cal-year-display{font-size:18px;font-weight:700;min-width:70px;text-align:center}
+.cal-years{display:flex;gap:6px;flex-wrap:wrap}
+.cal-year-chip{padding:4px 10px;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:999px;font-size:12px;cursor:pointer}
+.cal-year-chip.active{background:rgba(59,130,246,0.2);border-color:rgba(59,130,246,0.4);color:#93c5fd}
+.cal-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+@media(max-width:1100px){.cal-grid{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:768px){.cal-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:480px){.cal-grid{grid-template-columns:1fr}}
+.cal-month-full{background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:14px;padding:10px}
+.cal-month-full.pathway{border-color:rgba(34,197,94,0.4);background:rgba(34,197,94,0.05)}
+.cal-month-full.current{border-color:rgba(59,130,246,0.5);background:rgba(59,130,246,0.08)}
+.cal-m-title{display:flex;justify-content:space-between;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid rgba(255,255,255,0.06);font-size:13px;font-weight:600}
+.cal-weekdays{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.cal-wd{font-size:9px;text-align:center;color:var(--muted);padding:2px}
+.cal-days{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.cal-day{aspect-ratio:1;display:grid;place-items:center;font-size:10px;border-radius:4px}
+.cal-day.other{color:#3f3f46}
+.cal-day.today{background:#3b82f6;color:#fff;font-weight:600}
+.cal-day.pathway{background:rgba(34,197,94,0.25);color:#86efac}
+
+
+/* === CORE PURPOSE FIX - matches photo exactly === */
+.core-purpose{padding:18px !important}
+.core-header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:16px}
+.core-badge{display:inline-flex;align-items:center;padding:3px 8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:6px;font-size:10px;font-weight:600;letter-spacing:0.5px;color:#a1a1aa;text-transform:uppercase;margin-bottom:8px;backdrop-filter:blur(8px)}
+.core-header h2{margin:0 0 4px;font-size:20px;font-weight:600;letter-spacing:-0.2px}
+.core-header p{margin:0;color:#8a8a93;font-size:13px;line-height:1.4;max-width:520px}
+.core-stats{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.cstat{text-align:center;padding:8px 12px;background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.06);border-radius:10px;min-width:64px;backdrop-filter:blur(8px)}
+.cstat strong{display:block;font-size:20px;font-weight:600;line-height:1;margin-bottom:2px;color:#e4e4e7}
+.cstat span{font-size:10px;color:#71717a;font-weight:500;text-transform:uppercase;letter-spacing:0.3px}
+.cstat.arrow{background:transparent !important;border:none !important;padding:0 !important;min-width:auto !important;font-size:16px;opacity:0.3;color:#71717a}
+.cstat.highlight{background:rgba(16,185,129,0.1) !important;border:1px solid rgba(34,197,94,0.25) !important;box-shadow:0 0 12px rgba(16,185,129,0.1), inset 0 1px 0 rgba(255,255,255,0.03)}
+.cstat.highlight strong{color:#86efac}
+.cstat.highlight span{color:#6ee7b7}
+
+.purpose-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:900px){.purpose-grid{grid-template-columns:1fr}}
+.purpose-item{display:flex;gap:10px;padding:12px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:10px;transition:all 0.2s;position:relative;overflow:hidden}
+.purpose-item:hover{background:rgba(255,255,255,0.035);border-color:rgba(255,255,255,0.1)}
+.purpose-item::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.08),transparent);opacity:0.4}
+.pi-icon{width:32px;height:32px;flex-shrink:0;display:grid;place-items:center;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.06);border-radius:8px;font-size:16px;backdrop-filter:blur(8px)}
+.purpose-item h4{margin:0 0 4px;font-size:13px;font-weight:600;color:#d4d4d8}
+.purpose-item p{margin:0;font-size:12px;line-height:1.45;color:#8a8a93}
+
 </style>
 </head>
 <body>
@@ -582,7 +841,6 @@ main::-webkit-scrollbar-thumb:hover {
 <div class="menu-overlay" id="menuOverlay"></div>
 <div class="app">
   <aside class="left" aria-label="Main navigation">
-    <div class="logo">🌍</div>
     <button class="nav-btn active" data-view="home" title="Home">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11.5L12 4l9 7.5"/><path d="M5 10v9h3v-5h4v5h3v-9"/></svg>
     </button>
@@ -609,12 +867,12 @@ main::-webkit-scrollbar-thumb:hover {
 
   <div class="center">
     <header class="topbar">
-      <div class="title">🌍 NGO Visa Navigator — Complete System</div>
+      <div class="title">🌍 NGO Visa Navigator</div>
       <div class="chips">
         <div class="chip" id="chip-dark">Dark Mode</div>
-        <div class="chip live"><span class="dot"></span>Live Sync</div>
+        <div class="chip live"><span class="dot"></span><span id="live-time">Live</span></div>
         <div class="chip">2026</div>
-        <div class="chip" id="chip-search">⌘K</div>
+        <div class="chip" id="chip-search" title="Home">⌘K</div>
       </div>
     </header>
 
@@ -627,22 +885,22 @@ main::-webkit-scrollbar-thumb:hover {
           <div class="core-header">
             <div>
               <div class="core-badge">CORE PURPOSE</div>
-              <h2>NGO Visa Pathway System</h2>
-              <p>Build travel history to increase Netherlands approval from 45% to 81%</p>
+              <h2>NGO Visa Pathway</h2>
+              <p>For Bangladeshi passport holders: build genuine travel history through real NGO events before applying to Schengen. No shortcuts, no fake invites.</p>
             </div>
             <div class="core-stats">
-              <div class="cstat"><strong>45%</strong><span>Direct</span></div>
+              <div class="cstat"><strong>High</strong><span>Risk Direct</span></div>
               <div class="cstat arrow">→</div>
-              <div class="cstat highlight"><strong>81%</strong><span>Pathway</span></div>
+              <div class="cstat highlight"><strong>Lower</strong><span>With History</span></div>
             </div>
           </div>
           <div class="purpose-grid">
-            <div class="purpose-item"><div class="pi-icon">🎯</div><div><h4>Problem</h4><p>55% Schengen rejection for BD passports. One refusal creates 5-year record.</p></div></div>
-            <div class="purpose-item"><div class="pi-icon">💡</div><div><h4>Solution</h4><p>Malaysia 92% → Turkey 85% → Spain 78% builds 3 stamps in 4 months.</p></div></div>
-            <div class="purpose-item"><div class="pi-icon">📊</div><div><h4>Data</h4><p>Without: 45% approval. With: 81% approval. ROI $1,340 saves 2 years.</p></div></div>
-            <div class="purpose-item"><div class="pi-icon">👥</div><div><h4>For Who</h4><p>First-time applicants, previous refusals, age 18-35, $1,500+ funds.</p></div></div>
-            <div class="purpose-item"><div class="pi-icon">🗺️</div><div><h4>Blueprint</h4><p>Month 1 Malaysia, Month 2-3 Turkey, Month 4-5 Spain, Month 6-7 Netherlands.</p></div></div>
-            <div class="purpose-item"><div class="pi-icon">⚙️</div><div><h4>You Get</h4><p>50 NGOs, 32 docs, 10 templates, 7-phase plan, $1,340 total cost.</p></div></div>
+            <div class="purpose-item"><div class="pi-icon">🎯</div><div><h4>Problem</h4><p>BD passports get extra scrutiny. Blank passport + weak ties = high refusal risk for Netherlands.</p></div></div>
+            <div class="purpose-item"><div class="pi-icon">💡</div><div><h4>Solution</h4><p>Attend 2-3 real NGO trainings in visa-friendly countries first. Build stamps, invitations, and return history.</p></div></div>
+            <div class="purpose-item"><div class="pi-icon">📊</div><div><h4>Reality Check</h4><p>No guarantees. Consulates decide case-by-case. History helps but funds, job, and ties matter more.</p></div></div>
+            <div class="purpose-item"><div class="pi-icon">👥</div><div><h4>For Who</h4><p>Actual NGO workers, volunteers, students with proof of activity and $2k+ budget for travel.</p></div></div>
+            <div class="purpose-item"><div class="pi-icon">🗺️</div><div><h4>Blueprint</h4><p>Month 1-2: Malaysia/Thailand. Month 3-4: Turkey/UAE. Month 6+: Spain or Netherlands if profile ready.</p></div></div>
+            <div class="purpose-item"><div class="pi-icon">⚙️</div><div><h4>You Get</h4><p>Curated NGO list, document checklists, invitation templates, and timeline planner — not a visa guarantee.</p></div></div>
           </div>
         </div>
 
@@ -679,11 +937,40 @@ main::-webkit-scrollbar-thumb:hover {
 
       <!-- STRATEGY -->
       <section id="view-strategy" class="view">
-        <div class="grid-3">
-          <div class="card" style="text-align:center"><div style="font-size:28px;font-weight:700;color:#a7f3d0">92%</div><div style="color:var(--muted);font-size:13px;margin-top:4px">Avg Success</div></div>
-          <div class="card" style="text-align:center"><div style="font-size:28px;font-weight:700;color:#d4d4d8">45% → 81%</div><div style="color:var(--muted);font-size:13px;margin-top:4px">Skip Penalty Avoided</div></div>
-          <div class="card" style="text-align:center"><div style="font-size:28px;font-weight:700;color:#e4e4e7">28d</div><div style="color:var(--muted);font-size:13px;margin-top:4px">Total Timeline</div></div>
+
+        <div class="card">
+          <h2>Calendar 2026–2033 — Full Dates</h2>
+          <p>Navigate years. Green months = your pathway. Today highlighted.</p>
+          <div class="calendar-full">
+            <div class="cal-controls">
+              <div class="cal-nav">
+                <button class="cal-btn" id="calPrev">←</button>
+                <div class="cal-year-display" id="calYear">2026</div>
+                <button class="cal-btn" id="calNext">→</button>
+              </div>
+              <div class="cal-years" id="calYears"></div>
+            </div>
+            <div class="cal-grid" id="calGrid"></div>
+          </div>
         </div>
+
+        <div class="card">
+          <h2>Strategy Playbook — 10 Essential Moves</h2>
+          <p style="color:var(--text-dim);margin:6px 0 16px">For Bangladeshi passport holders: build genuine travel history through real NGO events before Schengen. No shortcuts.</p>
+          <div class="purpose-grid">
+            <div class="purpose-item"><div class="pi-icon">1️⃣</div><div><h4>Follow 1-2-3-4 Sequence</h4><p>Malaysia/Thailand → Turkey/UAE → Spain → Netherlands. Skipping steps = 55% refusal rate.</p></div></div>
+            <div class="purpose-item"><div class="pi-icon">2️⃣</div><div><h4>Season Funds 28+ Days</h4><p>Keep $2,000+ stable for 3 months. No large last-minute deposits — consulates flag it.</p></div></div>
+            <div class="purpose-item"><div class="pi-icon">3️⃣</div><div><h4>Hit Right Windows</h4><p>Apply May or September. Avoid July/August (Spain closed) and December holidays.</p></div></div>
+            <div class="purpose-item"><div class="pi-icon">4️⃣</div><div><h4>Prove Strong Ties</h4><p>Job NOC, salary slips, property, family. Blank passport needs home-root proof.</p></div></div>
+            <div class="purpose-item"><div class="pi-icon">5️⃣</div><div><h4>Authentic Invites Only</h4><p>Real NGO registration, agenda, contact. Fake letters = instant ban, not just refusal.</p></div></div>
+            <div class="purpose-item"><div class="pi-icon">6️⃣</div><div><h4>Collect Return History</h4><p>Return on time, keep boarding passes and stamps. 2-3 returns beat any cover letter.</p></div></div>
+            <div class="purpose-item"><div class="pi-icon">7️⃣</div><div><h4>Rejection Protocol</h4><p>Wait 90 days, add 1 new visa-friendly trip, fix the exact reason cited. Never reapply immediately.</p></div></div>
+            <div class="purpose-item"><div class="pi-icon">8️⃣</div><div><h4>Match Every Detail</h4><p>Name, dates, funds must align across bank, NOC, invite, insurance. One mismatch triggers refusal.</p></div></div>
+            <div class="purpose-item"><div class="pi-icon">9️⃣</div><div><h4>Master Your Story</h4><p>Know your NGO role, project goals, why this country first. Vague answers destroy credibility.</p></div></div>
+            <div class="purpose-item"><div class="pi-icon">🔟</div><div><h4>Manage Risk & Budget</h4><p>Plan $2k-3k total, refundable tickets, early insurance. History improves odds — no guarantees.</p></div></div>
+          </div>
+        </div>
+
 
         <div class="card step-card">
           <div class="step-head">
@@ -2331,159 +2618,54 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
 <script>
 document.querySelectorAll('.dropdown-header').forEach(btn => {
   btn.addEventListener('click', () => {
-    const target = document.getElementById('dd-' + btn.dataset.target);
-    const isOpen = target.classList.contains('open');
-    
-    // Close all
-    document.querySelectorAll('.dropdown-body').forEach(b => b.classList.remove('open'));
-    document.querySelectorAll('.dropdown-header').forEach(h => h.classList.remove('active'));
-    
-    // Open clicked if was closed
-    if (!isOpen) {
-      target.classList.add('open');
-      btn.classList.add('active');
-    }
+    const t=document.getElementById('dd-'+btn.dataset.target);
+    const o=t?.classList.contains('open');
+    document.querySelectorAll('.dropdown-body').forEach(b=>b.classList.remove('open'));
+    document.querySelectorAll('.dropdown-header').forEach(h=>h.classList.remove('active'));
+    if(!o&&t){t.classList.add('open');btn.classList.add('active');}
   });
 });
+function toggleMobileMenu(){
+  const l=document.querySelector('.left'),b=document.getElementById('hamburger'),o=document.getElementById('menuOverlay');
+  if(!l)return;const i=l.classList.contains('open');l.classList.toggle('open',!i);b?.classList.toggle('active',!i);o?.classList.toggle('active',!i);document.body.style.overflow=i?'':'hidden';
+}
+document.getElementById('menuOverlay')?.addEventListener('click',toggleMobileMenu);
 </script>
 
 
 <script>
-document.addEventListener('DOMContentLoaded', function(){
-  const hamburger = document.getElementById('hamburger');
-  const leftNav = document.querySelector('.left');
-  if(hamburger && leftNav){
-    hamburger.addEventListener('click', function(){
-      leftNav.classList.toggle('open');
-    });
-    // Close when clicking a nav button on mobile
-    document.querySelectorAll('.left .nav-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        if(window.innerWidth <= 768){
-          leftNav.classList.remove('open');
-        }
-      });
-    });
-    // Close when clicking outside
-    document.addEventListener('click', function(e){
-      if(window.innerWidth <= 768 && leftNav.classList.contains('open')){
-        if(!leftNav.contains(e.target) && !hamburger.contains(e.target)){
-          leftNav.classList.remove('open');
-        }
-      }
-    });
-  }
+document.addEventListener('DOMContentLoaded',()=>{
+  // Nav
+  document.querySelectorAll('.nav-btn').forEach(b=>{
+    b.onclick=()=>{document.querySelectorAll('.nav-btn').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.getElementById('view-'+b.dataset.view)?.classList.add('active');window.scrollTo({top:0,behavior:'smooth'});if(window.innerWidth<=768)setTimeout(toggleMobileMenu,150);}
+  });
+  // Simple home search
+  const chip=document.getElementById('chip-search');
+  chip?.addEventListener('click',()=>{document.querySelector('[data-view="home"]')?.click()});
+  document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();chip?.click()}});
+  // Live time
+  const lt=document.getElementById('live-time');
+function ut(){
+  if(!lt) return;
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('en-US', {weekday:'short', month:'short', day:'numeric'});
+  const timeStr = now.toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit', hour12:true});
+  lt.textContent = `${dateStr} • ${timeStr}`;
+}
+ut();
+setInterval(ut, 1000);
 });
 </script>
 
 
 <script>
 (function(){
-  function initMobileNav(){
-    const hamburger = document.getElementById('hamburger');
-    const leftNav = document.querySelector('.left');
-    const overlay = document.getElementById('menuOverlay');
-    
-    if(!hamburger || !leftNav) return;
-    
-    function toggleMenu(){
-      const isOpen = leftNav.classList.contains('open');
-      if(isOpen){
-        leftNav.classList.remove('open');
-        hamburger.classList.remove('active');
-        if(overlay) overlay.classList.remove('active');
-        document.body.style.overflow = '';
-      } else {
-        leftNav.classList.add('open');
-        hamburger.classList.add('active');
-        if(overlay) overlay.classList.add('active');
-        document.body.style.overflow = 'hidden';
-      }
-    }
-    
-    hamburger.addEventListener('click', function(e){
-      e.stopPropagation();
-      toggleMenu();
-    });
-    
-    hamburger.addEventListener('touchstart', function(e){
-      e.stopPropagation();
-    });
-    
-    if(overlay){
-      overlay.addEventListener('click', toggleMenu);
-      overlay.addEventListener('touchstart', toggleMenu);
-    }
-    
-    // Close on nav click
-    document.querySelectorAll('.left .nav-btn').forEach(btn => {
-      btn.addEventListener('click', function(){
-        if(window.innerWidth <= 768){
-          setTimeout(() => {
-            leftNav.classList.remove('open');
-            hamburger.classList.remove('active');
-            if(overlay) overlay.classList.remove('active');
-            document.body.style.overflow = '';
-          }, 150);
-        }
-      });
-    });
-  }
-  
-  if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', initMobileNav);
-  } else {
-    initMobileNav();
-  }
+  const g=document.getElementById('calGrid'),y=document.getElementById('calYear'),p=document.getElementById('calPrev'),n=document.getElementById('calNext'),ys=document.getElementById('calYears');
+  if(!g)return;let cy=2026;const sy=2026,ey=2033,t=new Date(),pm={2026:[4,5,6,7]};
+  for(let i=sy;i<=ey;i++){const c=document.createElement('div');c.className='cal-year-chip'+(i===cy?' active':'');c.textContent=i;c.onclick=()=>{cy=i;r()};ys.appendChild(c)}
+  function r(){y.textContent=cy;document.querySelectorAll('.cal-year-chip').forEach((c,i)=>c.classList.toggle('active',sy+i===cy));p.disabled=cy<=sy;n.disabled=cy>=ey;g.innerHTML='';const mn=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],wd=['S','M','T','W','T','F','S'];for(let m=0;m<12;m++){const d=document.createElement('div');const ip=pm[cy]?.includes(m),ic=cy===t.getFullYear()&&m===t.getMonth();d.className='cal-month-full'+(ip?' pathway':'')+(ic?' current':'');const fd=new Date(cy,m,1),ld=new Date(cy,m+1,0),dim=ld.getDate(),sw=fd.getDay();let h=`<div class="cal-m-title"><span>${mn[m]} ${cy}</span><span>${dim}d</span></div><div class="cal-weekdays">${wd.map(w=>`<div class="cal-wd">${w}</div>`).join('')}</div><div class="cal-days">`;for(let i=0;i<sw;i++)h+='<div class="cal-day other"></div>';for(let d1=1;d1<=dim;d1++){const it=cy===t.getFullYear()&&m===t.getMonth()&&d1===t.getDate();h+=`<div class="cal-day${it?' today':''}${ip?' pathway':''}">${d1}</div>`}h+='</div>';d.innerHTML=h;g.appendChild(d)}}
+  p.onclick=()=>{if(cy>sy){cy--;r()}};n.onclick=()=>{if(cy<ey){cy++;r()}};r();
 })();
-</script>
-
-
-<script>
-function toggleMobileMenu(){
-  var left = document.querySelector('.left');
-  var burger = document.getElementById('hamburger');
-  var overlay = document.getElementById('menuOverlay');
-  
-  if(!left) return;
-  
-  var isOpen = left.classList.contains('open');
-  
-  if(isOpen){
-    left.classList.remove('open');
-    if(burger) burger.classList.remove('active');
-    if(overlay) overlay.classList.remove('active');
-    document.body.style.overflow = '';
-  } else {
-    left.classList.add('open');
-    if(burger) burger.classList.add('active');
-    if(overlay) overlay.classList.add('active');
-    document.body.style.overflow = 'hidden';
-  }
-}
-
-// Close menu when clicking nav buttons
-document.addEventListener('click', function(e){
-  if(e.target.closest('.left .nav-btn') && window.innerWidth <= 768){
-    setTimeout(function(){
-      var left = document.querySelector('.left');
-      var burger = document.getElementById('hamburger');
-      var overlay = document.getElementById('menuOverlay');
-      if(left) left.classList.remove('open');
-      if(burger) burger.classList.remove('active');
-      if(overlay) overlay.classList.remove('active');
-      document.body.style.overflow = '';
-    }, 100);
-  }
-});
-
-// Close on overlay click
-document.addEventListener('DOMContentLoaded', function(){
-  var overlay = document.getElementById('menuOverlay');
-  if(overlay){
-    overlay.onclick = toggleMobileMenu;
-  }
-});
 </script>
 
 </body>
